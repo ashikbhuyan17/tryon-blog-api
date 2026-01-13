@@ -1,0 +1,582 @@
+Initialize packeage.json
+--------------------------
+        : npm init
+
+install typescript
+-------------------
+        : yarn add -D typescript
+
+install primary packeages
+-------------------------
+        : yarn add express mongoose cors dotenv
+        : yarn add -D @types/express @types/cors
+
+init and configure ts config 
+----------------------------
+        : tsc --init
+        change rootDir and outDir location
+
+create git ignore file and configure
+------------------------------------
+        node_modules
+        package-lock.json
+        .env
+        yarn.lock
+        *.log
+        *audit.json
+
+install ts-node-dev and configure package.json
+----------------------------------------------
+        : yarn add ts-node-dev --dev
+        Write script
+            "start": "ts-node-dev --respawn --transpile-only src/server.ts",
+
+install eslint and configure - https://blog.logrocket.com/linting-typescript-eslint-prettier/
+---------------------------------------------------------------------------------------------
+        Peast this code into tsconfig.json in first
+            "include": ["src"],
+            "exclude": ["node_modules"],
+        Install eslint    
+            : yarn add -D eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin
+        Create .eslintrc in the root directory and peast the code
+            {
+                "parser": "@typescript-eslint/parser",
+                "parserOptions": {
+                    "ecmaVersion": 13,
+                    "sourceType": "module"
+                },
+                "plugins": ["@typescript-eslint"],
+                // HERE
+                "extends": [
+                    "eslint:recommended",
+                    "plugin:@typescript-eslint/recommended",
+                    "prettier"
+                ],
+
+                "rules": {
+                    "no-unused-vars": "error",
+                    "no-console": "error",
+                    "no-undef": "error",
+                    "no-unused-expressions": "error",
+                    "no-unreachable": "error",
+                    "@typescript-eslint/consistent-type-definitions": ["error", "type"]
+                },
+
+                "env": {
+                    "browser": true,
+                    "es2021": true,
+                    "node": true
+                },
+
+                "globals": {
+                    "process": "readonly"
+                }
+            }
+        Create .eslintignore in the root directory and peast line
+            node_modules
+            dist
+            .env
+
+        Write this script in package.json
+            "lint:check": "eslint --ignore-path .eslintignore --ext .js,.ts .",
+
+Install extention on IDE eslint and prettier and configure
+-----------------------------------------------------------
+        ESLint by microsoft - https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint
+        prettier by prettier - https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode
+        Write these line in settings.json on your IDE
+            {
+                "editor.defaultFormatter": "esbenp.prettier-vscode",
+                "editor.formatOnSave": true,
+            }
+
+
+install prettier and configure - https://blog.logrocket.com/linting-typescript-eslint-prettier/
+-----------------------------------------------------------------------------------------------
+        Install prettier on your server and configure
+            yarn add -D prettier eslint-config-prettier
+        create .prettierrc in the root directory and peast the line 
+            {
+                "semi": false,
+                "singleQuote": true,
+                "arrowParens": "avoid"
+            }
+        Write this script in package.json
+            "prettier:check": "prettier --ignore-path .gitignore --write \"**/*.+(js|ts|json)\"",
+
+install husky - https://typicode.github.io/husky/getting-started.html
+---------------------------------------------------------------------
+        : yarn add husky --dev
+        : yarn husky install
+        : yarn husky add .husky/pre-commit "npm test"
+        Write this script in package.json
+            "lint-prettier": "yarn lint:check && yarn prettier:check",
+        change in precommit file in the husky folder 
+            : remove npm code and add here yarn lint-prettier
+
+install lint-staged and configure
+---------------------------------
+        : yarn add -D lint-staged
+        Write the code in package.json after the script object
+            "lint-staged": {
+                                "src/**/*.ts": "yarn lint-prettier"
+                            },
+
+Congifure vs code setting
+---------------------------------------------
+        create .vscode folder in the root directory
+        create setting.json in the .vscode folder
+        peast the code in the setting.json which you create previous step
+            {
+                "editor.codeActionsOnSave": {
+                    "source.fixAll.eslint": true,
+                    "source.organizeImports": true
+                }
+            }
+
+
+create config folder 
+------------------------
+        : create src folder in the root directory
+        : create config folder in the src folder
+        : create .env file in the root directory and write your server secret
+        create index.ts file in the config folder
+            import dotenv from 'dotenv'
+            import path from 'path'
+            dotenv.config({ path: path.join(process.cwd(), '.env') })
+
+            export default {
+                env: process.env.NODE_ENV,
+                port: process.env.PORT,
+                db_uri: process.env.DB_URI,
+                user_default_pass: process.env.USER_DEFAULT_PASS,
+            }
+
+create interface folder 
+------------------------
+        create interface folder in the src directory
+        create error.ts  in the interface folder and paste the code
+            export type IErrorMessage = {
+                    path: string
+                    message: string
+                }
+        create common.ts  in the interface folder and paste the code
+            import { IErrorMessage } from './error'
+
+            export type IErrorResponse = {
+            statusCode: number
+            message: string
+            errorMessage: IErrorMessage[]
+            }
+
+Install winston and configure - https://www.npmjs.com/package/winston
+---------------------------------------------------------------------
+        : yarn add winston
+        install daily logger
+                : yarn add winston-daily-rotate-file
+        create utilities folder in the src directory
+        create logger.ts in the utilities folder
+        peast the code in logger.ts
+            /* eslint-disable no-undef */
+            import { createLogger, format, transports } from 'winston'
+            const { combine, timestamp, label, printf } = format
+            import DailyRotateFile from 'winston-daily-rotate-file'
+            import path from 'path'
+
+            const myFormat = printf(({ level, message, label, timestamp }) => {
+            const date = new Date(timestamp)
+
+            return `${date} - [${label}] ${level}: ${message}`
+            })
+
+            export const logger = createLogger({
+            level: 'info',
+            format: combine(label({ label: 'UMS' }), timestamp(), myFormat),
+            transports: [
+                    new transports.Console(),
+                    new DailyRotateFile({
+                    filename: path.join(
+                        process.cwd(),
+                        'logs',
+                        'winston',
+                        'successes',
+                        'ums-%DATE%-success.log'
+                    ),
+                    datePattern: 'HH - DD.MM.YYYY',
+                    zippedArchive: true,
+                    maxSize: '20m',
+                    maxFiles: '14d',
+                    }),
+                ],
+            })
+
+            export const errorLogger = createLogger({
+            level: 'error',
+            format: combine(label({ label: 'UMS' }), timestamp(), myFormat),
+            transports: [
+                    new transports.Console(),
+                    new DailyRotateFile({
+                    filename: path.join(
+                        process.cwd(),
+                        'logs',
+                        'winston',
+                        'errors',
+                        'ums-%DATE%-error.log'
+                    ),
+                    datePattern: 'HH - DD.MM.YYYY',
+                    zippedArchive: true,
+                    maxSize: '20m',
+                    maxFiles: '14d',
+                    }),
+                ],
+            })
+
+create interface folder 
+------------------------
+        create errorFormating folder in the src directory
+        create handleValidationError.ts  in the interface folder and paste the code
+            import mongoose from 'mongoose'
+            import { IErrorMessage } from '../interface/error'
+            import { IErrorResponse } from '../interface/common'
+
+            export const handleValidationError = (
+            err: mongoose.Error.ValidationError
+            ): IErrorResponse => {
+                const errors: IErrorMessage[] = Object.values(err.errors).map(el => {
+                    return {
+                        path: el?.path,
+                        message: el?.message,
+                    }
+                })
+
+                return {
+                    statusCode: 500,
+                    message: 'Validation Error',
+                    errorMessage: errors,
+                }
+            }
+
+        create common.ts  in the interface folder and paste the code
+            export class ApiError extends Error {
+                statusCode: number
+                constructor(statusCode: number, message: string | undefined, stack = '') {
+                    super(message)
+                    this.statusCode = statusCode
+                    if (stack) {
+                    this.stack = stack
+                    } else {
+                    Error.captureStackTrace(this, this.constructor)
+                    }
+                }
+            }
+
+create middleware folder 
+------------------------
+        create middleware folder in the src folder
+        create globalError.ts file in the middleware folder and paste the code
+            /* eslint-disable no-unused-expressions */
+            /* eslint-disable no-console */
+            import { ErrorRequestHandler } from 'express'
+            import config from '../config'
+            import { IErrorMessage } from '../interface/error'
+            import { handleValidationError } from '../errorFormating/handleValidationError'
+            import { ApiError } from '../errorFormating/apiError'
+            import { errorLogger } from '../utilities/logger'
+
+            export const globarError: ErrorRequestHandler = (error, req, res, next) => {
+                let statusCode = 400
+                let message = 'Something went wrong'
+                let errorMessage: IErrorMessage[] = []
+
+                // Dependency
+                config.env === 'development'
+                    ? console.log(`Global Error Handler ==`, error)
+                    : errorLogger.error(`Global Error Handler ==`, error)
+
+                // Check
+                if (error?.name === 'ValidationError') {
+                    const simplifiedError = handleValidationError(error)
+                    statusCode = simplifiedError.statusCode
+                    message = simplifiedError.message
+                    errorMessage = simplifiedError.errorMessage
+                } else if (error instanceof ApiError) {
+                    statusCode = error?.statusCode
+                    message = error?.message
+                    errorMessage = error?.message
+                    ? [
+                        {
+                            path: '',
+                            message: error?.message,
+                        },
+                        ]
+                    : []
+                } else if (error instanceof Error) {
+                    message = error?.message
+                    errorMessage = error?.message
+                    ? [
+                        {
+                            path: '',
+                            message: error?.message,
+                        },
+                        ]
+                    : []
+                }
+
+                // Return Response
+                res.status(statusCode).send({
+                    success: false,
+                    message,
+                    errorMessage,
+                    stack: config.env !== 'production' ? error?.stack : undefined,
+                })
+                next()
+            }
+
+create utilities folder 
+------------------------
+        create bootStrap.ts file in the utilities folder and paste the code
+            /* eslint-disable no-console */
+            import mongoose from 'mongoose'
+            import config from '../config'
+            import app from '../app'
+            import { errorLogger, logger } from './logger'
+            import { Server } from 'http'
+            let server: Server
+
+            export async function bootStrap() {
+                try {
+                    await mongoose.connect(config.db_uri as string)
+                    server = app.listen(config.port, (): void => {
+                    logger.info(
+                        `==== ✌️  Your server is running on http://localhost:${config.port} ====`
+                    )
+                    })
+                    logger.info(`==== ✌️  DB Connection is succesfully ====`)
+                } catch (error) {
+                    errorLogger.error(`==== 🤞  Database Connection Error ====`, error)
+                }
+
+                process.on('unhandledRejection', error => {
+                    console.log(error)
+                    if (server) {
+                    server.close(() => {
+                        errorLogger.error(error)
+                        process.exit(1)
+                    })
+                    } else {
+                    process.exit(1)
+                    }
+                })
+            }
+
+create server and configure
+---------------------------
+        create app.ts in the src folder
+            import express, { Application, Request, Response, NextFunction } from 'express'
+            import cors from 'cors'
+            import userRoute from '../src/app/modules/users/user.route'
+            import { globarError } from './middleware/globalError'
+            const app: Application = express()
+
+            // Middleware
+            app.use(cors())
+            app.use(express.json())
+            app.use(express.urlencoded({ extended: true }))
+
+            // Data API
+            app.use('/api/v1/user', userRoute)
+
+            // Testing API
+            app.get('/', (req: Request, res: Response, next: NextFunction) => {
+                res.send('+++ App Running Successfully +++')
+                next()
+                // Uncought Error
+                // console.log(x)
+
+                // Test Error
+                // throw new Error('General Error')
+
+                // Test API Error
+                // throw new ApiError(403, 'API Error')
+
+                // Promiss rejection
+                // Promise.reject(new Error(`Unhandle Promiss Rejection`))
+            })
+
+            // Global error handle
+            app.use(globarError)
+
+            // Unknown API Handle
+            app.all('*', (req: Request, res: Response) => {
+                res.send(`+++ Requested Route Not Found +++`)
+            })
+
+            export default app
+
+        create server.ts
+            import { errorLogger, logger } from './utilities/logger'
+            import { bootStrap } from './utilities/bootStrap'
+            import { Server } from 'http'
+            let server: Server
+
+            process.on('uncaughtException', error => {
+                errorLogger.error(error)
+                process.exit(1)
+            })
+
+            bootStrap()
+
+            process.on('SIGTERM', () => {
+                logger.info(`Sigterm is received`)
+                if (server) {
+                    server.close()
+                }
+            })
+
+Install Zod for handle validation error - https://zod.dev/
+---------------------------------------------------------
+        install zod - yarn add zod
+        create reqValidate.ts and paste the code
+            import { NextFunction, Request, Response } from 'express'
+            import { AnyZodObject } from 'zod'
+
+            const reqValidate =
+            (schema: AnyZodObject) =>
+            async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+                try {
+                await schema.parseAsync({
+                    body: req.body,
+                    query: req.query,
+                    params: req.params,
+                    cookies: req.cookies,
+                })
+                    return next()
+                } catch (error) {
+                    next(error)
+                }
+            }
+            export default reqValidate
+        
+        Modified the globarError.ts by the condition
+            else if (error instanceof ZodError) {
+                const simplifiedError = handleZodError(error)
+                statusCode = simplifiedError.statusCode
+                message = simplifiedError.message
+                errorMessage = simplifiedError.errorMessage
+            }
+
+        Update error.ts in interface folder
+            export type IErrorMessage = {
+                path: string | number
+                message: string
+            }
+
+        Create validator in your specific moduler folder like this (file name user.validation.ts)
+            import { z } from 'zod'
+            export const userZod = z.object({
+                body: z.object({
+                    role: z.string({
+                    required_error: 'Z: Role is required',
+                    }),
+                    password: z.string().optional(),
+                }),
+            })
+
+        Use reqValidate function in the route like this
+            router.route('/').post(reqValidate(userZod), createUser)
+
+
+create global route
+-----------------------
+        Create routes folder in the app directory
+        create index.ts in the route folder
+            import express from 'express'
+            const router = express.Router()
+            import userRoute from '../modules/users/user.route'
+
+            const appRoutes = [
+                {
+                    path: '/user',
+                    route: userRoute,
+                },
+            ]
+
+            appRoutes.forEach(route => router.use(route.path, route.route))
+
+            export default router
+
+        update app.ts data api by the line and import the routers
+            app.use('/api/v1', routers)
+
+Formating tryCatch and Response
+-------------------------------
+        install http-status
+            yarn add http-status
+        create tryCatch.ts in the utilities folder and paste the code
+            import { NextFunction, Request, RequestHandler, Response } from 'express'
+
+            export const tryCatch = (fn: RequestHandler) => {
+                return async (req: Request, res: Response, next: NextFunction) => {
+                    try {
+                        await fn(req, res, next)
+                    } catch (error) {
+                        next(error)
+                    }
+                }
+            }
+
+        create apiRes.ts in the interface directory
+            export type IApiRes<T> = {
+                statusCode: number
+                success: boolean
+                message?: string | null
+                result?: T | null
+            }
+
+        Create sendRes.ts in the utilities folder
+            import { Response } from 'express'
+            import { IApiRes } from '../interface/apiRes'
+
+            export const sendRes = <T>(res: Response, data: IApiRes<T>): void => {
+                const resData: IApiRes<T> = {
+                    statusCode: data.statusCode,
+                    success: data.success,
+                    message: data.message || null,
+                    result: data.result || null,
+                }
+                res.status(data.statusCode).send(resData)
+            }
+
+        Use tryCatch and sendRes in the controllter
+            export const createUser = tryCatch(
+                async (req: Request, res: Response, next: NextFunction) => {
+                        const result = await createUserService(req.body)
+                        sendRes(res, {
+                        statusCode: status.OK,
+                        success: true,
+                        message: 'Create users successfully',
+                        result: result,
+                    })
+                        next()
+                }
+            )
+
+Handle Unknown api in the app.ts 
+        // Unknown API Handle
+        app.use((req: Request, res: Response, next: NextFunction) => {
+            res.status(status.NOT_FOUND).json({
+                success: false,
+                message: 'Not Found',
+                errorMessage: [
+                {
+                    path: req.originalUrl,
+                    message: 'API Not Found',
+                },
+                ],
+            })
+            next()
+        })
+
+
+
+

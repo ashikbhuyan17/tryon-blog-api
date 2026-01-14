@@ -1,5 +1,5 @@
 import { Types } from 'mongoose'
-import { IBlog } from './blog.interface'
+import { IBlog, BlogCategory } from './blog.interface'
 import { Blog } from './blog.model'
 import { ApiError } from '../../../errorFormating/apiError'
 import status from 'http-status'
@@ -9,6 +9,7 @@ export interface PaginationOptions {
   page: number
   limit: number
   status?: 'draft' | 'published'
+  category?: BlogCategory
 }
 
 export interface PaginatedResult<T> {
@@ -17,6 +18,17 @@ export interface PaginatedResult<T> {
   page: number
   limit: number
   totalPages: number
+}
+
+/**
+ * Helper function to ensure category field is always present (null if not set)
+ * Mongoose .lean() omits null fields, so we need to explicitly add them
+ */
+const ensureCategoryField = (blog: any): IBlog => {
+  return {
+    ...blog,
+    category: blog.category ?? null,
+  } as IBlog
 }
 
 /**
@@ -30,6 +42,8 @@ export const createBlogService = async (
   const blogData: IBlog = {
     ...data,
     author: new Types.ObjectId(authorMongoId),
+    // Ensure category is null if not provided
+    category: data.category ?? null,
   }
 
   const result = await Blog.create(blogData)
@@ -37,7 +51,9 @@ export const createBlogService = async (
   // Populate author info
   await result.populate('author', 'name phone id _id')
 
-  return result
+  // Convert to plain object and ensure category is present
+  const blogObj = result.toObject()
+  return ensureCategoryField(blogObj)
 }
 
 /**
@@ -49,19 +65,27 @@ export const createBlogService = async (
 export const getAllPublishedBlogsService = async (
   options: PaginationOptions,
 ): Promise<PaginatedResult<IBlog>> => {
-  const { page, limit, status } = options
+  const { page, limit, status, category } = options
   const skip = (page - 1) * limit
 
   // Build query filter - default to 'published' if no status specified
-  const filter: { status: 'draft' | 'published' } = {
+  const filter: {
+    status: 'draft' | 'published'
+    category?: BlogCategory
+  } = {
     status: status || 'published',
+  }
+
+  // Add category filter if provided
+  if (category) {
+    filter.category = category
   }
 
   // Determine sort field based on status
   // Published blogs sorted by publishedAt, drafts sorted by createdAt
   const sortField = filter.status === 'published' ? 'publishedAt' : 'createdAt'
 
-  // Get blogs based on status filter, sorted appropriately
+  // Get blogs based on status and category filters, sorted appropriately
   const [blogs, total] = await Promise.all([
     Blog.find(filter)
       .populate('author', 'name phone id _id')
@@ -72,8 +96,11 @@ export const getAllPublishedBlogsService = async (
     Blog.countDocuments(filter),
   ])
 
+  // Ensure category field is always present (null if not set)
+  const blogsWithCategory = blogs.map(ensureCategoryField)
+
   return {
-    data: blogs as IBlog[],
+    data: blogsWithCategory,
     total,
     page,
     limit,
@@ -90,21 +117,46 @@ export const getMyBlogsService = async (
   authorMongoId: string, // MongoDB _id
   options: PaginationOptions,
 ): Promise<PaginatedResult<IBlog>> => {
-  const { page, limit } = options
+  const { page, limit, status, category } = options
   const skip = (page - 1) * limit
 
+  // Build query filter
+  const filter: {
+    author: Types.ObjectId
+    status?: 'draft' | 'published'
+    category?: BlogCategory
+  } = {
+    author: new Types.ObjectId(authorMongoId),
+  }
+
+  // Add status filter if provided
+  if (status) {
+    filter.status = status
+  }
+
+  // Add category filter if provided
+  if (category) {
+    filter.category = category
+  }
+
+  // Determine sort field based on status
+  const sortField = filter.status === 'published' ? 'publishedAt' : 'createdAt'
+
   const [blogs, total] = await Promise.all([
-    Blog.find({ author: new Types.ObjectId(authorMongoId) })
+    Blog.find(filter)
       .populate('author', 'name phone id _id')
-      .sort({ createdAt: -1 })
+      .sort({ [sortField]: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),
-    Blog.countDocuments({ author: new Types.ObjectId(authorMongoId) }),
+    Blog.countDocuments(filter),
   ])
 
+  // Ensure category field is always present (null if not set)
+  const blogsWithCategory = blogs.map(ensureCategoryField)
+
   return {
-    data: blogs as IBlog[],
+    data: blogsWithCategory,
     total,
     page,
     limit,
@@ -128,9 +180,12 @@ export const getBlogByIdService = async (
     throw new ApiError(status.NOT_FOUND, 'Blog not found')
   }
 
+  // Ensure category field is always present (null if not set)
+  const blogWithCategory = ensureCategoryField(blog)
+
   // If blog is published, anyone can view it
   if (blog.status === 'published') {
-    return blog as IBlog
+    return blogWithCategory
   }
 
   // If blog is draft, only the author can view it
@@ -141,7 +196,7 @@ export const getBlogByIdService = async (
         : blog.author.toString()
 
     if (authorMongoId === userMongoId) {
-      return blog as IBlog
+      return blogWithCategory
     }
   }
 
@@ -153,12 +208,13 @@ export const getBlogByIdService = async (
 
 /**
  * Update Blog Service
- * Only blog owner can update
+ * Blog owner or admin can update
  */
 export const updateBlogService = async (
   blogId: string,
   updateData: Partial<Omit<IBlog, '_id' | 'author' | 'createdAt'>>,
   userMongoId: string, // MongoDB _id
+  userRole?: string, // User role ('admin' or 'user')
 ): Promise<IBlog> => {
   // Find blog and check ownership
   const blog = await Blog.findById(blogId)
@@ -167,8 +223,11 @@ export const updateBlogService = async (
     throw new ApiError(status.NOT_FOUND, 'Blog not found')
   }
 
-  // Check if user is the author
-  if (blog.author.toString() !== userMongoId) {
+  // Check if user is the author OR admin
+  const isOwner = blog.author.toString() === userMongoId
+  const isAdmin = userRole === 'admin'
+
+  if (!isOwner && !isAdmin) {
     throw new ApiError(
       status.FORBIDDEN,
       'You do not have permission to update this blog',
@@ -182,16 +241,19 @@ export const updateBlogService = async (
   await blog.save()
   await blog.populate('author', 'name phone id _id')
 
-  return blog
+  // Convert to plain object and ensure category is present
+  const blogObj = blog.toObject()
+  return ensureCategoryField(blogObj)
 }
 
 /**
  * Delete Blog Service
- * Only blog owner can delete (soft delete - sets status to deleted or removes)
+ * Blog owner or admin can delete
  */
 export const deleteBlogService = async (
   blogId: string,
   userMongoId: string, // MongoDB _id
+  userRole?: string, // User role ('admin' or 'user')
 ): Promise<void> => {
   // Find blog and check ownership
   const blog = await Blog.findById(blogId)
@@ -200,8 +262,11 @@ export const deleteBlogService = async (
     throw new ApiError(status.NOT_FOUND, 'Blog not found')
   }
 
-  // Check if user is the author
-  if (blog.author.toString() !== userMongoId) {
+  // Check if user is the author OR admin
+  const isOwner = blog.author.toString() === userMongoId
+  const isAdmin = userRole === 'admin'
+
+  if (!isOwner && !isAdmin) {
     throw new ApiError(
       status.FORBIDDEN,
       'You do not have permission to delete this blog',

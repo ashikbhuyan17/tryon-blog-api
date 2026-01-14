@@ -43,14 +43,20 @@ const userSchema = new Schema<IUser>(
     role: {
       type: String,
       required: [true, 'Role is required'],
-      enum: ['reserveit', 'user'],
+      enum: ['admin', 'user'],
       default: 'user',
+    },
+    userType: {
+      type: String,
+      required: [true, 'UserType is required'],
+      enum: ['reserveit'],
+      default: 'reserveit',
     },
   },
   {
     timestamps: true,
   },
-)
+) as Schema<IUser, UserModel>
 
 // Hash password before saving to database
 userSchema.pre('save', async function (next) {
@@ -71,7 +77,7 @@ userSchema.statics.isUserExist = async function (
 ): Promise<IUserExistResult | null> {
   const user = await this.findOne(
     { phone },
-    { _id: 1, id: 1, phone: 1, password: 1, role: 1, name: 1 },
+    { _id: 1, id: 1, phone: 1, password: 1, role: 1, userType: 1, name: 1 },
   ).lean()
 
   if (!user) {

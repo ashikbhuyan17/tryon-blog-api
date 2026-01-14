@@ -23,6 +23,23 @@ const blogSchema = new Schema<IBlog>(
       required: [true, 'Status is required'],
       default: 'draft',
     },
+    category: {
+      type: String,
+      enum: {
+        values: [
+          'Featured',
+          'Announcement',
+          'Event',
+          'Reminder',
+          'News',
+          'Alert',
+          'Notification',
+        ],
+        message:
+          'Category must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification',
+      },
+      default: null,
+    },
     author: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -46,6 +63,8 @@ const blogSchema = new Schema<IBlog>(
 // Index for better query performance
 blogSchema.index({ author: 1, status: 1 })
 blogSchema.index({ status: 1, publishedAt: -1 })
+blogSchema.index({ category: 1, status: 1 }) // Index for category filtering
+blogSchema.index({ status: 1, category: 1, publishedAt: -1 }) // Composite index for filtering
 
 // Pre-save hook to set publishedAt when status changes to "published"
 blogSchema.pre('save', function (next) {

@@ -6,7 +6,8 @@ export type IUser = {
   name: string
   phone: string
   password: string
-  role?: string
+  role?: 'admin' | 'user' // Role: admin or user
+  userType?: 'reserveit' // UserType: must be reserveit (mandatory)
   createdAt?: Date
   updatedAt?: Date
 }
@@ -14,7 +15,7 @@ export type IUser = {
 // Type for user existence check result
 export type IUserExistResult = Pick<
   IUser,
-  'id' | 'phone' | 'password' | 'role' | 'name'
+  'id' | 'phone' | 'password' | 'role' | 'userType' | 'name'
 > & {
   _id?: string
 }

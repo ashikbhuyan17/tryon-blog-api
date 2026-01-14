@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getProfile = exports.loginUser = exports.registerUser = void 0;
+exports.deleteUser = exports.updateUser = exports.getUserById = exports.getAllUsers = exports.getProfile = exports.loginUser = exports.registerUser = void 0;
 const user_services_1 = require("./user.services");
 const sendRes_1 = require("../../../utilities/sendRes");
 const tryCatch_1 = require("../../../utilities/tryCatch");
@@ -48,8 +48,8 @@ exports.registerUser = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, 
  * - Returns token and user data
  */
 exports.loginUser = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { phone, password } = req.body;
-    const result = yield (0, user_services_1.loginUserService)(phone, password);
+    const { phone, password, userType } = req.body;
+    const result = yield (0, user_services_1.loginUserService)(phone, password, userType);
     (0, sendRes_1.sendRes)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -67,11 +67,81 @@ exports.getProfile = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, vo
     var _a;
     // User info is attached by auth middleware
     // Include both _id (Mongoose default) and id (custom)
-    const user = yield user_model_1.User.findOne({ id: (_a = req.user) === null || _a === void 0 ? void 0 : _a.id }, { _id: 1, id: 1, name: 1, phone: 1, role: 1, createdAt: 1, updatedAt: 1 });
+    const user = yield user_model_1.User.findOne({ id: (_a = req.user) === null || _a === void 0 ? void 0 : _a.id }, {
+        _id: 1,
+        id: 1,
+        name: 1,
+        phone: 1,
+        role: 1,
+        userType: 1,
+        createdAt: 1,
+        updatedAt: 1,
+    });
     (0, sendRes_1.sendRes)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
         message: 'User profile retrieved successfully',
         result: user,
+    });
+}));
+// Admin User Management Controllers
+/**
+ * Get All Users Controller (Admin only)
+ * Returns paginated list of all users
+ */
+exports.getAllUsers = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const options = {
+        page,
+        limit,
+    };
+    const result = yield (0, user_services_1.getAllUsersService)(options);
+    (0, sendRes_1.sendRes)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'Users retrieved successfully',
+        result: result,
+    });
+}));
+/**
+ * Get User by ID Controller (Admin only)
+ */
+exports.getUserById = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const result = yield (0, user_services_1.getUserByIdService)(id);
+    (0, sendRes_1.sendRes)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'User retrieved successfully',
+        result: result,
+    });
+}));
+/**
+ * Update User Controller (Admin only)
+ * Admin can update any user's name, phone, or role
+ */
+exports.updateUser = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    const result = yield (0, user_services_1.updateUserService)(id, req.body);
+    (0, sendRes_1.sendRes)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'User updated successfully',
+        result: result,
+    });
+}));
+/**
+ * Delete User Controller (Admin only)
+ * Admin can delete any user
+ */
+exports.deleteUser = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { id } = req.params;
+    yield (0, user_services_1.deleteUserService)(id);
+    (0, sendRes_1.sendRes)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: 'User deleted successfully',
+        result: null,
     });
 }));

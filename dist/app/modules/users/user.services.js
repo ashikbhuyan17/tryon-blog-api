@@ -23,7 +23,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createUserService = exports.loginUserService = exports.registerUserService = void 0;
+exports.deleteUserService = exports.updateUserService = exports.getUserByIdService = exports.getAllUsersService = exports.createUserService = exports.loginUserService = exports.registerUserService = void 0;
 const config_1 = __importDefault(require("../../../config"));
 const user_model_1 = require("./user.model");
 const user_utils_1 = require("./user.utils");
@@ -32,9 +32,9 @@ const http_status_1 = __importDefault(require("http-status"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 // Registration service
 const registerUserService = (data) => __awaiter(void 0, void 0, void 0, function* () {
-    // Check if role is "reserveit" - only reserveit role allowed
-    if (data.role !== 'reserveit') {
-        throw new apiError_1.ApiError(http_status_1.default.FORBIDDEN, 'Only "reserveit" role is allowed for registration');
+    // Check if userType is "reserveit" - mandatory for registration
+    if (data.userType !== 'reserveit') {
+        throw new apiError_1.ApiError(http_status_1.default.FORBIDDEN, 'UserType must be "reserveit" for registration');
     }
     // Check if user already exists
     const existingUser = yield user_model_1.User.isUserExist(data.phone);
@@ -50,7 +50,8 @@ const registerUserService = (data) => __awaiter(void 0, void 0, void 0, function
         name: data.name,
         phone: data.phone,
         password: data.password,
-        role: 'reserveit', // Force reserveit role
+        role: data.role || 'user', // Default to 'user' if not provided
+        userType: 'reserveit', // Force reserveit userType
     };
     const result = yield user_model_1.User.create(userData);
     // Remove password from response
@@ -60,15 +61,18 @@ const registerUserService = (data) => __awaiter(void 0, void 0, void 0, function
 });
 exports.registerUserService = registerUserService;
 // Login service
-const loginUserService = (phone, password) => __awaiter(void 0, void 0, void 0, function* () {
+const loginUserService = (phone, password, userType) => __awaiter(void 0, void 0, void 0, function* () {
+    if (userType !== 'reserveit') {
+        throw new apiError_1.ApiError(http_status_1.default.FORBIDDEN, 'UserType must be same as registration');
+    }
     // Check if user exists
     const user = yield user_model_1.User.isUserExist(phone);
     if (!user) {
         throw new apiError_1.ApiError(http_status_1.default.UNAUTHORIZED, 'Invalid phone or password');
     }
-    // Check if user has "reserveit" role - only reserveit role allowed to login
-    if (user.role !== 'reserveit') {
-        throw new apiError_1.ApiError(http_status_1.default.FORBIDDEN, 'Access denied. Only "reserveit" role users can login');
+    // Check if user has "reserveit" userType - mandatory for login
+    if (user.userType !== 'reserveit') {
+        throw new apiError_1.ApiError(http_status_1.default.FORBIDDEN, 'Access denied. Only users with userType "reserveit" can login');
     }
     // Check if password matches
     const isPasswordMatched = yield user_model_1.User.isPasswordMatched(password, user.password);
@@ -84,6 +88,7 @@ const loginUserService = (phone, password) => __awaiter(void 0, void 0, void 0, 
         id: user.id,
         phone: user.phone,
         role: user.role,
+        userType: user.userType,
     };
     // @ts-ignore - jsonwebtoken type issue with expiresIn
     const accessToken = jsonwebtoken_1.default.sign(payload, jwtSecret, {
@@ -114,3 +119,76 @@ const createUserService = (data) => __awaiter(void 0, void 0, void 0, function* 
     return result;
 });
 exports.createUserService = createUserService;
+const getAllUsersService = (options) => __awaiter(void 0, void 0, void 0, function* () {
+    const { page, limit } = options;
+    const skip = (page - 1) * limit;
+    const [users, total] = yield Promise.all([
+        user_model_1.User.find({}, { password: 0 }) // Exclude password
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+        user_model_1.User.countDocuments({}),
+    ]);
+    return {
+        data: users,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+    };
+});
+exports.getAllUsersService = getAllUsersService;
+/**
+ * Get User by ID Service (Admin only)
+ */
+const getUserByIdService = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = yield user_model_1.User.findById(userId, { password: 0 }).lean();
+    if (!user) {
+        throw new apiError_1.ApiError(http_status_1.default.NOT_FOUND, 'User not found');
+    }
+    return user;
+});
+exports.getUserByIdService = getUserByIdService;
+/**
+ * Update User Service (Admin only)
+ * Admin can update any user
+ */
+const updateUserService = (userId, updateData) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = yield user_model_1.User.findById(userId);
+    if (!user) {
+        throw new apiError_1.ApiError(http_status_1.default.NOT_FOUND, 'User not found');
+    }
+    // Update allowed fields
+    if (updateData.name !== undefined) {
+        user.name = updateData.name;
+    }
+    if (updateData.phone !== undefined) {
+        // Check if phone already exists for another user
+        const existingUser = yield user_model_1.User.findOne({ phone: updateData.phone });
+        if (existingUser && existingUser._id.toString() !== userId) {
+            throw new apiError_1.ApiError(http_status_1.default.CONFLICT, 'Phone number already exists for another user');
+        }
+        user.phone = updateData.phone;
+    }
+    if (updateData.role !== undefined) {
+        user.role = updateData.role;
+    }
+    yield user.save();
+    // Return user without password
+    const _a = user.toObject(), { password: _ } = _a, userWithoutPassword = __rest(_a, ["password"]);
+    return userWithoutPassword;
+});
+exports.updateUserService = updateUserService;
+/**
+ * Delete User Service (Admin only)
+ * Admin can delete any user
+ */
+const deleteUserService = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = yield user_model_1.User.findById(userId);
+    if (!user) {
+        throw new apiError_1.ApiError(http_status_1.default.NOT_FOUND, 'User not found');
+    }
+    yield user_model_1.User.findByIdAndDelete(userId);
+});
+exports.deleteUserService = deleteUserService;

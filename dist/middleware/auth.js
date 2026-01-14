@@ -50,7 +50,7 @@ const auth = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () 
         const decoded = jsonwebtoken_1.default.verify(token, config_1.default.jwt.secret);
         // Find user in database
         // Include both _id (Mongoose default) and id (custom)
-        const user = yield user_model_1.User.findOne({ id: decoded.id }, { _id: 1, id: 1, phone: 1, role: 1, name: 1 });
+        const user = yield user_model_1.User.findOne({ id: decoded.id }, { _id: 1, id: 1, phone: 1, role: 1, userType: 1, name: 1 });
         if (!user) {
             throw new apiError_1.ApiError(http_status_1.default.UNAUTHORIZED, 'User not found!');
         }
@@ -61,6 +61,7 @@ const auth = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () 
             _id: ((_a = user._id) === null || _a === void 0 ? void 0 : _a.toString()) || '',
             phone: user.phone,
             role: user.role || 'user',
+            userType: user.userType || 'reserveit',
         };
         // Continue to next middleware/route handler
         next();

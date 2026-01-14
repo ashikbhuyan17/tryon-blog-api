@@ -21,6 +21,20 @@ exports.createBlogZod = zod_1.z.object({
             .min(1, 'Description cannot be empty')
             .trim(),
         status: zod_1.z.enum(['draft', 'published']),
+        category: zod_1.z
+            .enum([
+            'Featured',
+            'Announcement',
+            'Event',
+            'Reminder',
+            'News',
+            'Alert',
+            'Notification',
+        ], {
+            invalid_type_error: 'Category must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification',
+        })
+            .nullable()
+            .optional(),
         image: zod_1.z
             .string()
             .optional()
@@ -59,6 +73,20 @@ exports.updateBlogZod = zod_1.z.object({
             .trim()
             .optional(),
         status: zod_1.z.enum(['draft', 'published']).optional(),
+        category: zod_1.z
+            .enum([
+            'Featured',
+            'Announcement',
+            'Event',
+            'Reminder',
+            'News',
+            'Alert',
+            'Notification',
+        ], {
+            invalid_type_error: 'Category must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification',
+        })
+            .nullable()
+            .optional(),
         image: zod_1.z
             .string()
             .optional()
@@ -110,5 +138,18 @@ exports.paginationZod = zod_1.z.object({
             message: 'Limit must be between 1 and 100',
         }),
         status: zod_1.z.enum(['draft', 'published']).optional(),
+        category: zod_1.z
+            .enum([
+            'Featured',
+            'Announcement',
+            'Event',
+            'Reminder',
+            'News',
+            'Alert',
+            'Notification',
+        ], {
+            invalid_type_error: 'Category must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification',
+        })
+            .optional(),
     }),
 });

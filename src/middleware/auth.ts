@@ -14,6 +14,7 @@ declare global {
         _id?: string // MongoDB _id
         phone: string
         role: string
+        userType?: string
       }
     }
   }
@@ -59,13 +60,14 @@ export const auth = async (req: Request, res: Response, next: NextFunction) => {
       id: string
       phone: string
       role: string
+      userType?: string
     }
 
     // Find user in database
     // Include both _id (Mongoose default) and id (custom)
     const user = await User.findOne(
       { id: decoded.id },
-      { _id: 1, id: 1, phone: 1, role: 1, name: 1 },
+      { _id: 1, id: 1, phone: 1, role: 1, userType: 1, name: 1 },
     )
 
     if (!user) {
@@ -79,6 +81,7 @@ export const auth = async (req: Request, res: Response, next: NextFunction) => {
       _id: user._id?.toString() || '',
       phone: user.phone,
       role: user.role || 'user',
+      userType: user.userType || 'reserveit',
     }
 
     // Continue to next middleware/route handler

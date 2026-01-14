@@ -8,6 +8,7 @@ import {
   deleteBlogService,
   PaginationOptions,
 } from './blog.services'
+import { BlogCategory } from './blog.interface'
 import { sendRes } from '../../../utilities/sendRes'
 import { tryCatch } from '../../../utilities/tryCatch'
 import status from 'http-status'
@@ -42,11 +43,12 @@ export const createBlog = tryCatch(async (req: Request, res: Response) => {
 /**
  * Get All Blogs Controller
  * Public endpoint - no authentication required
- * Supports pagination and status filtering
+ * Supports pagination, status filtering, and category filtering
  * Query params:
  *   - page: Page number (default: 1)
  *   - limit: Items per page (default: 10, max: 100)
  *   - status: Filter by status - "draft" or "published" (default: "published")
+ *   - category: Filter by category - Featured, Announcement, Event, Reminder, News, Alert, Notification
  * Note: Query params are validated and transformed by paginationZod middleware
  */
 export const getAllPublishedBlogs = tryCatch(
@@ -55,23 +57,32 @@ export const getAllPublishedBlogs = tryCatch(
     const page = Number(req.query.page) || 1
     const limit = Number(req.query.limit) || 10
     const statusFilter = req.query.status as 'draft' | 'published' | undefined
+    const categoryFilter = req.query.category as BlogCategory | undefined
 
     const options: PaginationOptions = {
       page,
       limit,
       status: statusFilter,
+      category: categoryFilter,
     }
 
     const result = await getAllPublishedBlogsService(options)
 
-    const statusMessage = statusFilter
-      ? `${statusFilter} blogs`
-      : 'published blogs'
+    let message = 'Blogs retrieved successfully'
+    if (statusFilter && categoryFilter) {
+      message = `${statusFilter} ${categoryFilter} blogs retrieved successfully`
+    } else if (statusFilter) {
+      message = `${statusFilter} blogs retrieved successfully`
+    } else if (categoryFilter) {
+      message = `${categoryFilter} blogs retrieved successfully`
+    } else {
+      message = 'Published blogs retrieved successfully'
+    }
 
     sendRes(res, {
       statusCode: status.OK,
       success: true,
-      message: `${statusMessage} retrieved successfully`,
+      message: message,
       result: result,
     })
   },
@@ -81,6 +92,12 @@ export const getAllPublishedBlogs = tryCatch(
  * Get My Blogs Controller
  * Requires authentication
  * Returns all blogs by the authenticated user
+ * Supports pagination, status filtering, and category filtering
+ * Query params:
+ *   - page: Page number (default: 1)
+ *   - limit: Items per page (default: 10, max: 100)
+ *   - status: Filter by status - "draft" or "published" (optional)
+ *   - category: Filter by category - Featured, Announcement, Event, Reminder, News, Alert, Notification (optional)
  * Note: Query params are validated and transformed by paginationZod middleware
  */
 export const getMyBlogs = tryCatch(async (req: Request, res: Response) => {
@@ -98,18 +115,31 @@ export const getMyBlogs = tryCatch(async (req: Request, res: Response) => {
   // Query params are already validated and transformed by paginationZod
   const page = Number(req.query.page) || 1
   const limit = Number(req.query.limit) || 10
+  const statusFilter = req.query.status as 'draft' | 'published' | undefined
+  const categoryFilter = req.query.category as BlogCategory | undefined
 
   const options: PaginationOptions = {
     page,
     limit,
+    status: statusFilter,
+    category: categoryFilter,
   }
 
   const result = await getMyBlogsService(authorMongoId, options)
 
+  let message = 'Your blogs retrieved successfully'
+  if (statusFilter && categoryFilter) {
+    message = `Your ${statusFilter} ${categoryFilter} blogs retrieved successfully`
+  } else if (statusFilter) {
+    message = `Your ${statusFilter} blogs retrieved successfully`
+  } else if (categoryFilter) {
+    message = `Your ${categoryFilter} blogs retrieved successfully`
+  }
+
   sendRes(res, {
     statusCode: status.OK,
     success: true,
-    message: 'Your blogs retrieved successfully',
+    message: message,
     result: result,
   })
 })
@@ -134,11 +164,12 @@ export const getBlogById = tryCatch(async (req: Request, res: Response) => {
 
 /**
  * Update Blog Controller
- * Requires authentication and ownership
+ * Requires authentication and ownership (or admin role)
  */
 export const updateBlog = tryCatch(async (req: Request, res: Response) => {
   const { id } = req.params
   const userMongoId = req.user?._id
+  const userRole = req.user?.role
 
   if (!userMongoId) {
     return sendRes(res, {
@@ -149,7 +180,7 @@ export const updateBlog = tryCatch(async (req: Request, res: Response) => {
     })
   }
 
-  const result = await updateBlogService(id, req.body, userMongoId)
+  const result = await updateBlogService(id, req.body, userMongoId, userRole)
 
   sendRes(res, {
     statusCode: status.OK,
@@ -161,11 +192,12 @@ export const updateBlog = tryCatch(async (req: Request, res: Response) => {
 
 /**
  * Delete Blog Controller
- * Requires authentication and ownership
+ * Requires authentication and ownership (or admin role)
  */
 export const deleteBlog = tryCatch(async (req: Request, res: Response) => {
   const { id } = req.params
   const userMongoId = req.user?._id
+  const userRole = req.user?.role
 
   if (!userMongoId) {
     return sendRes(res, {
@@ -176,7 +208,7 @@ export const deleteBlog = tryCatch(async (req: Request, res: Response) => {
     })
   }
 
-  await deleteBlogService(id, userMongoId)
+  await deleteBlogService(id, userMongoId, userRole)
 
   sendRes(res, {
     statusCode: status.OK,

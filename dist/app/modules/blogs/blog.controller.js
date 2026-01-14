@@ -44,11 +44,12 @@ exports.createBlog = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, vo
 /**
  * Get All Blogs Controller
  * Public endpoint - no authentication required
- * Supports pagination and status filtering
+ * Supports pagination, status filtering, and category filtering
  * Query params:
  *   - page: Page number (default: 1)
  *   - limit: Items per page (default: 10, max: 100)
  *   - status: Filter by status - "draft" or "published" (default: "published")
+ *   - category: Filter by category - Featured, Announcement, Event, Reminder, News, Alert, Notification
  * Note: Query params are validated and transformed by paginationZod middleware
  */
 exports.getAllPublishedBlogs = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -56,19 +57,31 @@ exports.getAllPublishedBlogs = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
     const statusFilter = req.query.status;
+    const categoryFilter = req.query.category;
     const options = {
         page,
         limit,
         status: statusFilter,
+        category: categoryFilter,
     };
     const result = yield (0, blog_services_1.getAllPublishedBlogsService)(options);
-    const statusMessage = statusFilter
-        ? `${statusFilter} blogs`
-        : 'published blogs';
+    let message = 'Blogs retrieved successfully';
+    if (statusFilter && categoryFilter) {
+        message = `${statusFilter} ${categoryFilter} blogs retrieved successfully`;
+    }
+    else if (statusFilter) {
+        message = `${statusFilter} blogs retrieved successfully`;
+    }
+    else if (categoryFilter) {
+        message = `${categoryFilter} blogs retrieved successfully`;
+    }
+    else {
+        message = 'Published blogs retrieved successfully';
+    }
     (0, sendRes_1.sendRes)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
-        message: `${statusMessage} retrieved successfully`,
+        message: message,
         result: result,
     });
 }));
@@ -76,6 +89,12 @@ exports.getAllPublishedBlogs = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(
  * Get My Blogs Controller
  * Requires authentication
  * Returns all blogs by the authenticated user
+ * Supports pagination, status filtering, and category filtering
+ * Query params:
+ *   - page: Page number (default: 1)
+ *   - limit: Items per page (default: 10, max: 100)
+ *   - status: Filter by status - "draft" or "published" (optional)
+ *   - category: Filter by category - Featured, Announcement, Event, Reminder, News, Alert, Notification (optional)
  * Note: Query params are validated and transformed by paginationZod middleware
  */
 exports.getMyBlogs = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -92,15 +111,29 @@ exports.getMyBlogs = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, vo
     // Query params are already validated and transformed by paginationZod
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
+    const statusFilter = req.query.status;
+    const categoryFilter = req.query.category;
     const options = {
         page,
         limit,
+        status: statusFilter,
+        category: categoryFilter,
     };
     const result = yield (0, blog_services_1.getMyBlogsService)(authorMongoId, options);
+    let message = 'Your blogs retrieved successfully';
+    if (statusFilter && categoryFilter) {
+        message = `Your ${statusFilter} ${categoryFilter} blogs retrieved successfully`;
+    }
+    else if (statusFilter) {
+        message = `Your ${statusFilter} blogs retrieved successfully`;
+    }
+    else if (categoryFilter) {
+        message = `Your ${categoryFilter} blogs retrieved successfully`;
+    }
     (0, sendRes_1.sendRes)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
-        message: 'Your blogs retrieved successfully',
+        message: message,
         result: result,
     });
 }));
@@ -122,12 +155,13 @@ exports.getBlogById = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, v
 }));
 /**
  * Update Blog Controller
- * Requires authentication and ownership
+ * Requires authentication and ownership (or admin role)
  */
 exports.updateBlog = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     const { id } = req.params;
     const userMongoId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+    const userRole = (_b = req.user) === null || _b === void 0 ? void 0 : _b.role;
     if (!userMongoId) {
         return (0, sendRes_1.sendRes)(res, {
             statusCode: http_status_1.default.UNAUTHORIZED,
@@ -136,7 +170,7 @@ exports.updateBlog = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, vo
             result: null,
         });
     }
-    const result = yield (0, blog_services_1.updateBlogService)(id, req.body, userMongoId);
+    const result = yield (0, blog_services_1.updateBlogService)(id, req.body, userMongoId, userRole);
     (0, sendRes_1.sendRes)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -146,12 +180,13 @@ exports.updateBlog = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, vo
 }));
 /**
  * Delete Blog Controller
- * Requires authentication and ownership
+ * Requires authentication and ownership (or admin role)
  */
 exports.deleteBlog = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     const { id } = req.params;
     const userMongoId = (_a = req.user) === null || _a === void 0 ? void 0 : _a._id;
+    const userRole = (_b = req.user) === null || _b === void 0 ? void 0 : _b.role;
     if (!userMongoId) {
         return (0, sendRes_1.sendRes)(res, {
             statusCode: http_status_1.default.UNAUTHORIZED,
@@ -160,7 +195,7 @@ exports.deleteBlog = (0, tryCatch_1.tryCatch)((req, res) => __awaiter(void 0, vo
             result: null,
         });
     }
-    yield (0, blog_services_1.deleteBlogService)(id, userMongoId);
+    yield (0, blog_services_1.deleteBlogService)(id, userMongoId, userRole);
     (0, sendRes_1.sendRes)(res, {
         statusCode: http_status_1.default.OK,
         success: true,

@@ -20,6 +20,24 @@ export const createBlogZod = z.object({
       .min(1, 'Description cannot be empty')
       .trim(),
     status: z.enum(['draft', 'published']),
+    category: z
+      .enum(
+        [
+          'Featured',
+          'Announcement',
+          'Event',
+          'Reminder',
+          'News',
+          'Alert',
+          'Notification',
+        ],
+        {
+          invalid_type_error:
+            'Category must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification',
+        },
+      )
+      .nullable()
+      .optional(),
     image: z
       .string()
       .optional()
@@ -65,6 +83,24 @@ export const updateBlogZod = z.object({
       .trim()
       .optional(),
     status: z.enum(['draft', 'published']).optional(),
+    category: z
+      .enum(
+        [
+          'Featured',
+          'Announcement',
+          'Event',
+          'Reminder',
+          'News',
+          'Alert',
+          'Notification',
+        ],
+        {
+          invalid_type_error:
+            'Category must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification',
+        },
+      )
+      .nullable()
+      .optional(),
     image: z
       .string()
       .optional()
@@ -124,5 +160,22 @@ export const paginationZod = z.object({
         message: 'Limit must be between 1 and 100',
       }),
     status: z.enum(['draft', 'published']).optional(),
+    category: z
+      .enum(
+        [
+          'Featured',
+          'Announcement',
+          'Event',
+          'Reminder',
+          'News',
+          'Alert',
+          'Notification',
+        ],
+        {
+          invalid_type_error:
+            'Category must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification',
+        },
+      )
+      .optional(),
   }),
 })

@@ -8,13 +8,13 @@ import jwt from 'jsonwebtoken'
 
 // Registration service
 export const registerUserService = async (
-  data: Pick<IUser, 'name' | 'phone' | 'password' | 'role'>,
+  data: Pick<IUser, 'name' | 'phone' | 'password' | 'role' | 'userType'>,
 ): Promise<Partial<IUser>> => {
-  // Check if role is "reserveit" - only reserveit role allowed
-  if (data.role !== 'reserveit') {
+  // Check if userType is "reserveit" - mandatory for registration
+  if (data.userType !== 'reserveit') {
     throw new ApiError(
       status.FORBIDDEN,
-      'Only "reserveit" role is allowed for registration',
+      'UserType must be "reserveit" for registration',
     )
   }
 
@@ -37,7 +37,8 @@ export const registerUserService = async (
     name: data.name,
     phone: data.phone,
     password: data.password,
-    role: 'reserveit', // Force reserveit role
+    role: data.role || 'user', // Default to 'user' if not provided
+    userType: 'reserveit', // Force reserveit userType
   }
 
   const result = await User.create(userData)
@@ -53,18 +54,25 @@ export const registerUserService = async (
 export const loginUserService = async (
   phone: string,
   password: string,
+  userType: string,
 ): Promise<{ accessToken: string; user: Partial<IUser> }> => {
+  if (userType !== 'reserveit') {
+    throw new ApiError(
+      status.FORBIDDEN,
+      'UserType must be same as registration',
+    )
+  }
   // Check if user exists
   const user = await User.isUserExist(phone)
   if (!user) {
     throw new ApiError(status.UNAUTHORIZED, 'Invalid phone or password')
   }
 
-  // Check if user has "reserveit" role - only reserveit role allowed to login
-  if (user.role !== 'reserveit') {
+  // Check if user has "reserveit" userType - mandatory for login
+  if (user.userType !== 'reserveit') {
     throw new ApiError(
       status.FORBIDDEN,
-      'Access denied. Only "reserveit" role users can login',
+      'Access denied. Only users with userType "reserveit" can login',
     )
   }
 
@@ -90,6 +98,7 @@ export const loginUserService = async (
     id: user.id,
     phone: user.phone,
     role: user.role,
+    userType: user.userType,
   }
 
   // @ts-ignore - jsonwebtoken type issue with expiresIn
@@ -121,4 +130,116 @@ export const createUserService = async (data: IUser): Promise<IUser | null> => {
     throw new Error('User create failed')
   }
   return result
+}
+
+// Admin User Management Services
+
+/**
+ * Get All Users Service (Admin only)
+ * Returns paginated list of all users
+ */
+export interface UserPaginationOptions {
+  page: number
+  limit: number
+}
+
+export interface UserPaginatedResult<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export const getAllUsersService = async (
+  options: UserPaginationOptions,
+): Promise<UserPaginatedResult<Partial<IUser>>> => {
+  const { page, limit } = options
+  const skip = (page - 1) * limit
+
+  const [users, total] = await Promise.all([
+    User.find({}, { password: 0 }) // Exclude password
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    User.countDocuments({}),
+  ])
+
+  return {
+    data: users as Partial<IUser>[],
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  }
+}
+
+/**
+ * Get User by ID Service (Admin only)
+ */
+export const getUserByIdService = async (
+  userId: string,
+): Promise<Partial<IUser> | null> => {
+  const user = await User.findById(userId, { password: 0 }).lean()
+
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, 'User not found')
+  }
+
+  return user as Partial<IUser>
+}
+
+/**
+ * Update User Service (Admin only)
+ * Admin can update any user
+ */
+export const updateUserService = async (
+  userId: string,
+  updateData: Partial<Pick<IUser, 'name' | 'phone' | 'role'>>,
+): Promise<Partial<IUser>> => {
+  const user = await User.findById(userId)
+
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, 'User not found')
+  }
+
+  // Update allowed fields
+  if (updateData.name !== undefined) {
+    user.name = updateData.name
+  }
+  if (updateData.phone !== undefined) {
+    // Check if phone already exists for another user
+    const existingUser = await User.findOne({ phone: updateData.phone })
+    if (existingUser && existingUser._id.toString() !== userId) {
+      throw new ApiError(
+        status.CONFLICT,
+        'Phone number already exists for another user',
+      )
+    }
+    user.phone = updateData.phone
+  }
+  if (updateData.role !== undefined) {
+    user.role = updateData.role as 'admin' | 'user'
+  }
+
+  await user.save()
+
+  // Return user without password
+  const { password: _, ...userWithoutPassword } = user.toObject()
+  return userWithoutPassword as Partial<IUser>
+}
+
+/**
+ * Delete User Service (Admin only)
+ * Admin can delete any user
+ */
+export const deleteUserService = async (userId: string): Promise<void> => {
+  const user = await User.findById(userId)
+
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, 'User not found')
+  }
+
+  await User.findByIdAndDelete(userId)
 }

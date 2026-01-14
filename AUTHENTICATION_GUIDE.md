@@ -6,7 +6,8 @@ This guide explains the secure authentication system built for your Node.js/Expr
 **Key Features:**
 - ✅ Password hashing with bcrypt
 - ✅ JWT token-based authentication
-- ✅ Role-based access control (only "reserveit" role allowed)
+- ✅ Role-based access control (`role`: "admin" or "user")
+- ✅ UserType-based access control (`userType`: must be "reserveit" - mandatory)
 - ✅ Dual ID system (`_id` and `id`)
 - ✅ Input validation with Zod
 - ✅ Secure error handling
@@ -63,7 +64,8 @@ src/
   "name": "John Doe",
   "phone": "01234567890",
   "password": "password123",
-  "role": "reserveit"
+  "role": "admin",
+  "userType": "reserveit"
 }
 ```
 
@@ -71,16 +73,17 @@ src/
 - `name`: Required, non-empty string
 - `phone`: Required, exactly 11 digits
 - `password`: Required, minimum 6 characters
-- `role`: **Required, must be exactly "reserveit"** (only "reserveit" role is allowed)
+- `role`: **Required, must be either "admin" or "user"**
+- `userType`: **Required, must be exactly "reserveit"** (mandatory for registration and login)
 
 **Process**:
-1. Validates input using Zod schema (including role validation)
-2. Checks if role is "reserveit" (service-level validation)
+1. Validates input using Zod schema (including role and userType validation)
+2. Checks if userType is "reserveit" (service-level validation - mandatory)
 3. Checks if user with phone already exists
 4. Generates unique user ID (custom `id` field)
 5. Password is automatically hashed by Mongoose pre-save hook (bcrypt with cost factor 12)
 6. User is saved to database with both `_id` (Mongoose default) and `id` (custom)
-7. Returns user data (password excluded, includes both IDs)
+7. Returns user data (password excluded, includes both IDs, role, and userType)
 
 **Response**:
 ```json
@@ -93,7 +96,8 @@ src/
     "id": "00001",
     "name": "John Doe",
     "phone": "01234567890",
-    "role": "reserveit",
+    "role": "admin",
+    "userType": "reserveit",
     "createdAt": "2026-01-13T...",
     "updatedAt": "2026-01-13T..."
   }
@@ -101,7 +105,7 @@ src/
 ```
 
 **Error Responses**:
-- `403 Forbidden`: If role is not "reserveit"
+- `403 Forbidden`: If userType is not "reserveit"
 - `409 Conflict`: If user with phone already exists
 - `400 Bad Request`: If validation fails
 
@@ -120,10 +124,10 @@ src/
 **Process**:
 1. Validates input (phone: 11 digits, password: required)
 2. Finds user by phone number
-3. **Checks if user has "reserveit" role** - only "reserveit" users can login
+3. **Checks if user has userType "reserveit"** - only users with userType "reserveit" can login
 4. Compares provided password with hashed password using bcrypt
-5. If password matches, generates JWT token
-6. Returns token and user data (includes both `_id` and `id`)
+5. If password matches, generates JWT token (includes role and userType)
+6. Returns token and user data (includes both `_id` and `id`, role, and userType)
 
 **Response**:
 ```json
@@ -138,14 +142,15 @@ src/
       "id": "00001",
       "name": "John Doe",
       "phone": "01234567890",
-      "role": "reserveit"
+      "role": "admin",
+      "userType": "reserveit"
     }
   }
 }
 ```
 
 **Error Responses**:
-- `403 Forbidden`: If user role is not "reserveit"
+- `403 Forbidden`: If user userType is not "reserveit"
 - `401 Unauthorized`: If phone/password is invalid
 
 ### 3. Dual ID System
@@ -166,26 +171,41 @@ The system uses both identifiers:
 - JWT token contains the custom `id` field
 - Database queries can use either identifier
 
-### 4. Role-Based Access Control
+### 4. Role and UserType-Based Access Control
 
-**"reserveit" Role Requirement:**
+**Role System:**
+- `role`: Can be either **"admin"** or **"user"**
+- Default role is **"user"** if not specified
+- Used for role-based access control within the application
 
-1. **Registration**: Only users with `role: "reserveit"` can register
-   - Validation schema enforces this
-   - Service layer double-checks the role
-   - Returns `403 Forbidden` if role is not "reserveit"
+**UserType System:**
+- `userType`: Must be **"reserveit"** (mandatory)
+- Default userType is **"reserveit"**
+- Used to control registration and login access
 
-2. **Login**: Only users with `role: "reserveit"` can login
-   - Service checks role before allowing login
-   - Returns `403 Forbidden` if role is not "reserveit"
+**"reserveit" UserType Requirement:**
 
-3. **Role Enum**: Model defines allowed roles: `['reserveit', 'user']`
-   - Default role is 'user' (but registration/login requires 'reserveit')
+1. **Registration**: Only users with `userType: "reserveit"` can register
+   - Validation schema enforces userType must be "reserveit"
+   - Service layer double-checks the userType
+   - Returns `403 Forbidden` if userType is not "reserveit"
+   - Role can be "admin" or "user" (defaults to "user" if not provided)
 
-**Important**: Users without "reserveit" role cannot:
+2. **Login**: Only users with `userType: "reserveit"` can login
+   - Service checks userType before allowing login
+   - Returns `403 Forbidden` if userType is not "reserveit"
+   - Role does not affect login ability (only userType matters)
+
+3. **Model Definitions**:
+   - Role enum: `['admin', 'user']` - Default: `'user'`
+   - UserType enum: `['reserveit']` - Default: `'reserveit'`
+
+**Important**: Users without `userType: "reserveit"` cannot:
 - Register new accounts
 - Login to the system
 - Access protected endpoints (even with valid credentials)
+
+**Note**: The `role` field ("admin" or "user") is separate from `userType` and can be used for additional authorization logic within your application, but does not affect registration/login eligibility.
 
 ### 5. Password Hashing (Automatic)
 
@@ -230,7 +250,8 @@ Header.Payload.Signature
 {
   "id": "00001",
   "phone": "01234567890",
-  "role": "reserveit",
+  "role": "admin",
+  "userType": "reserveit",
   "iat": 1234567890,  // issued at
   "exp": 1234571490   // expires at
 }
@@ -253,8 +274,8 @@ router.get('/profile', auth, getProfile)
 1. Extracts token from `Authorization` header (format: `Bearer <token>`)
 2. Verifies token signature and expiration
 3. Finds user in database (using custom `id` from token)
-4. Includes both `_id` and `id` in query
-5. Attaches user info to `req.user`
+4. Includes both `_id`, `id`, `role`, and `userType` in query
+5. Attaches user info to `req.user` (includes role and userType)
 6. Calls `next()` to continue to route handler
 7. Returns 401 error if token is invalid/expired
 
@@ -263,10 +284,10 @@ router.get('/profile', auth, getProfile)
 // GET /api/v1/user/profile
 export const getProfile = tryCatch(async (req: Request, res: Response) => {
   // req.user is available (set by auth middleware)
-  // Query includes both _id and id fields
+  // Query includes both _id and id fields, plus role and userType
   const user = await User.findOne(
     { id: req.user?.id },
-    { _id: 1, id: 1, name: 1, phone: 1, role: 1, createdAt: 1, updatedAt: 1 }
+    { _id: 1, id: 1, name: 1, phone: 1, role: 1, userType: 1, createdAt: 1, updatedAt: 1 }
   )
   sendRes(res, {
     statusCode: status.OK,
@@ -287,22 +308,23 @@ export const getProfile = tryCatch(async (req: Request, res: Response) => {
 6. **Input Validation**: Zod schemas validate all inputs
 7. **Error Messages**: Generic error messages prevent user enumeration attacks
 8. **Environment Variables**: Secrets stored in `.env`, not in code
-9. **Role-Based Access**: Only "reserveit" role can register/login
-10. **Dual Validation**: Both schema and service layer validate role
+9. **UserType-Based Access**: Only users with userType "reserveit" can register/login
+10. **Dual Validation**: Both schema and service layer validate userType
+11. **Role System**: Separate role field ("admin" or "user") for application-level authorization
 
 ## 📝 API Endpoints
 
 ### Public Endpoints
 
-1. **Register User** (Requires "reserveit" role)
+1. **Register User** (Requires userType "reserveit")
    - `POST /api/v1/user/register`
-   - Body: `{ name, phone, password, role: "reserveit" }`
-   - Returns: User object with both `_id` and `id`
+   - Body: `{ name, phone, password, role: "admin" | "user", userType: "reserveit" }`
+   - Returns: User object with both `_id` and `id`, role, and userType
 
-2. **Login** (Only "reserveit" users can login)
+2. **Login** (Only users with userType "reserveit" can login)
    - `POST /api/v1/user/login`
    - Body: `{ phone, password }`
-   - Returns: `{ accessToken, user }` (user includes both IDs)
+   - Returns: `{ accessToken, user }` (user includes both IDs, role, and userType)
 
 ### Protected Endpoints (Require Auth Token)
 
@@ -313,7 +335,7 @@ export const getProfile = tryCatch(async (req: Request, res: Response) => {
 
 ## 🧪 Testing with Postman/Thunder Client
 
-### 1. Register a User (with "reserveit" role)
+### 1. Register a User (with userType "reserveit")
 
 ```
 POST http://localhost:5000/api/v1/user/register
@@ -323,7 +345,8 @@ Content-Type: application/json
   "name": "John Doe",
   "phone": "01234567890",
   "password": "password123",
-  "role": "reserveit"
+  "role": "admin",
+  "userType": "reserveit"
 }
 ```
 
@@ -338,19 +361,20 @@ Content-Type: application/json
     "id": "00001",
     "name": "John Doe",
     "phone": "01234567890",
-    "role": "reserveit",
+    "role": "admin",
+    "userType": "reserveit",
     "createdAt": "2026-01-13T...",
     "updatedAt": "2026-01-13T..."
   }
 }
 ```
 
-**Error if role is not "reserveit":**
+**Error if userType is not "reserveit":**
 ```json
 {
   "statusCode": 403,
   "success": false,
-  "message": "Only \"reserveit\" role is allowed for registration"
+  "message": "UserType must be \"reserveit\" for registration"
 }
 ```
 
@@ -379,18 +403,19 @@ Content-Type: application/json
       "id": "00001",
       "name": "John Doe",
       "phone": "01234567890",
-      "role": "reserveit"
+      "role": "admin",
+      "userType": "reserveit"
     }
   }
 }
 ```
 
-**Error if user doesn't have "reserveit" role:**
+**Error if user doesn't have userType "reserveit":**
 ```json
 {
   "statusCode": 403,
   "success": false,
-  "message": "Access denied. Only \"reserveit\" role users can login"
+  "message": "Access denied. Only users with userType \"reserveit\" can login"
 }
 ```
 
@@ -414,7 +439,8 @@ Authorization: Bearer <paste-accessToken-here>
     "id": "00001",
     "name": "John Doe",
     "phone": "01234567890",
-    "role": "reserveit",
+    "role": "admin",
+    "userType": "reserveit",
     "createdAt": "2026-01-13T...",
     "updatedAt": "2026-01-13T..."
   }
@@ -431,13 +457,15 @@ Authorization: Bearer <paste-accessToken-here>
    - Verify password is correct
    - User might not exist
 
-3. **"Only 'reserveit' role is allowed for registration"**
-   - Registration requires `role: "reserveit"` in request body
-   - Check that role field is exactly "reserveit" (case-sensitive)
+3. **"UserType must be \"reserveit\" for registration"**
+   - Registration requires `userType: "reserveit"` in request body
+   - Check that userType field is exactly "reserveit" (case-sensitive)
+   - Role can be "admin" or "user" (defaults to "user" if not provided)
 
-4. **"Access denied. Only 'reserveit' role users can login"**
-   - User exists but doesn't have "reserveit" role
-   - Only users with "reserveit" role can login
+4. **"Access denied. Only users with userType \"reserveit\" can login"**
+   - User exists but doesn't have userType "reserveit"
+   - Only users with userType "reserveit" can login
+   - Role ("admin" or "user") does not affect login eligibility
 
 5. **"Token has expired"**
    - Token expired (default: 1 hour)
@@ -471,10 +499,11 @@ Authorization: Bearer <paste-accessToken-here>
 - `id`: Custom sequential ID, human-readable, useful for business logic
 - Both available for flexibility in queries and responses
 
-### Why Role-Based Access?
-- Restricts registration/login to authorized users only
+### Why UserType-Based Access?
+- Restricts registration/login to authorized users only (userType: "reserveit")
 - Prevents unauthorized access at multiple layers
-- Easy to extend for different role requirements
+- Easy to extend for different userType requirements
+- Role ("admin" or "user") is separate and used for application-level authorization
 
 ## 🔄 Next Steps
 
@@ -498,8 +527,9 @@ router.get('/protected', auth, protectedController)
 ### Accessing User in Controller
 ```typescript
 export const myController = tryCatch(async (req: Request, res: Response) => {
-  const userId = req.user?.id      // Custom ID
-  const userRole = req.user?.role  // User role
+  const userId = req.user?.id           // Custom ID
+  const userRole = req.user?.role       // User role ("admin" or "user")
+  const userType = req.user?.userType   // UserType ("reserveit")
   // ... your logic
 })
 ```
@@ -525,18 +555,22 @@ The auth middleware automatically handles:
 
 All errors are passed to your global error handler.
 
-### Role Validation Example
+### UserType Validation Example
 ```typescript
 // In validation schema
-role: z
-  .string({ required_error: 'Role is required' })
+role: z.enum(['admin', 'user'], {
+  required_error: 'Role is required',
+  invalid_type_error: 'Role must be either "admin" or "user"',
+}),
+userType: z
+  .string({ required_error: 'UserType is required' })
   .refine(val => val === 'reserveit', {
-    message: 'Only "reserveit" role is allowed for registration',
+    message: 'UserType must be "reserveit"',
   })
 
 // In service
-if (data.role !== 'reserveit') {
-  throw new ApiError(status.FORBIDDEN, 'Only "reserveit" role is allowed')
+if (data.userType !== 'reserveit') {
+  throw new ApiError(status.FORBIDDEN, 'UserType must be "reserveit" for registration')
 }
 ```
 
@@ -549,10 +583,11 @@ if (data.role !== 'reserveit') {
   id: String,              // Custom sequential ID (e.g., "00001")
   name: String,            // Required
   phone: String,           // Required, unique, exactly 11 digits
-  password: String,         // Required, hashed with bcrypt
-  role: String,            // Required, enum: ['reserveit', 'user']
-  createdAt: Date,         // Auto-generated
-  updatedAt: Date          // Auto-generated
+  password: String,        // Required, hashed with bcrypt
+  role: String,            // Required, enum: ['admin', 'user'], default: 'user'
+  userType: String,        // Required, enum: ['reserveit'], default: 'reserveit'
+  createdAt: Date,        // Auto-generated
+  updatedAt: Date         // Auto-generated
 }
 ```
 
@@ -561,7 +596,8 @@ if (data.role !== 'reserveit') {
 This authentication system provides:
 - ✅ Secure password storage (bcrypt hashing)
 - ✅ JWT token-based authentication
-- ✅ Role-based access control (only "reserveit" role)
+- ✅ Role-based access control (`role`: "admin" or "user")
+- ✅ UserType-based access control (`userType`: must be "reserveit" - mandatory)
 - ✅ Dual ID system (`_id` and `id`)
 - ✅ Comprehensive input validation
 - ✅ Secure error handling
@@ -595,6 +631,7 @@ src/app/modules/blogs/
 - **title** (string, required): Blog title, max 200 characters
 - **description** (string, required): Blog content/description
 - **status** ("draft" | "published", required): Blog publication status
+- **category** (string, optional): Blog category/tag - must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification (defaults to null if not provided)
 - **author** (ObjectId, required): Reference to User model
 - **createdAt** (Date, auto-generated): Creation timestamp
 - **updatedAt** (Date, auto-generated): Last update timestamp
@@ -605,8 +642,9 @@ src/app/modules/blogs/
 
 1. **Automatic Timestamps**: `createdAt` and `updatedAt` are automatically managed
 2. **Published Date**: Automatically set when status changes to "published"
-3. **Indexes**: Optimized queries on `author`, `status`, and `publishedAt`
-4. **User Reference**: Links blog to User via MongoDB ObjectId
+3. **Category System**: Optional categorization with predefined tags (Featured, Announcement, Event, Reminder, News, Alert, Notification). Defaults to null if not provided.
+4. **Indexes**: Optimized queries on `author`, `status`, `category`, and `publishedAt`
+5. **User Reference**: Links blog to User via MongoDB ObjectId
 
 ## 🔐 CRUD Operations
 
@@ -622,6 +660,7 @@ src/app/modules/blogs/
   "title": "My First Blog Post",
   "description": "This is the content of my blog post...",
   "status": "draft",
+  "category": "News", // Optional - defaults to null if not provided
   "image": "data:image/png;base64,iVBORw0KGgoAAAANS..." // Optional
 }
 ```
@@ -630,6 +669,7 @@ src/app/modules/blogs/
 - `title`: Required, 1-200 characters
 - `description`: Required, non-empty
 - `status`: Required, must be "draft" or "published"
+- `category`: Optional, must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification (defaults to null if not provided)
 - `image`: Optional, must be valid base64 format if provided
 
 **Process**:
@@ -651,6 +691,7 @@ src/app/modules/blogs/
     "title": "My First Blog Post",
     "description": "This is the content...",
     "status": "draft",
+    "category": "News", // or null if not provided
     "author": {
       "_id": "507f191e810c19729de860ea",
       "id": "00001",
@@ -667,20 +708,27 @@ src/app/modules/blogs/
 
 ### 2. Get All Published Blogs
 
-**Endpoint**: `GET /api/v1/blog?page=1&limit=10`
+**Endpoint**: `GET /api/v1/blog?page=1&limit=10&status=published&category=News`
 
 **Authentication**: Not required (public)
 
 **Query Parameters**:
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 10, max: 100)
+- `status` (optional): Filter by status - "draft" or "published" (default: "published")
+- `category` (optional): Filter by category - Featured, Announcement, Event, Reminder, News, Alert, Notification
 
 **Process**:
-1. Fetches only blogs with `status: "published"`
-2. Sorts by `publishedAt` (newest first)
+1. Fetches blogs filtered by status (default: "published") and optional category
+2. Sorts by `publishedAt` for published blogs, `createdAt` for drafts (newest first)
 3. Applies pagination
 4. Populates author information
 5. Returns paginated results
+
+**Filtering Examples**:
+- `GET /api/v1/blog?status=published&category=News` - Get published News blogs
+- `GET /api/v1/blog?category=Featured` - Get published Featured blogs (status defaults to published)
+- `GET /api/v1/blog?status=draft&category=Announcement` - Get draft Announcement blogs
 
 **Response**:
 ```json
@@ -695,6 +743,7 @@ src/app/modules/blogs/
         "title": "Published Blog",
         "description": "Content...",
         "status": "published",
+        "category": "News",
         "author": {
           "_id": "507f191e810c19729de860ea",
           "id": "00001",
@@ -716,20 +765,26 @@ src/app/modules/blogs/
 
 ### 3. Get My Blogs
 
-**Endpoint**: `GET /api/v1/blog/my/blogs?page=1&limit=10`
+**Endpoint**: `GET /api/v1/blog/my/blogs?page=1&limit=10&status=published&category=News`
 
 **Authentication**: Required (JWT token)
 
 **Query Parameters**:
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 10, max: 100)
+- `status` (optional): Filter by status - "draft" or "published"
+- `category` (optional): Filter by category - Featured, Announcement, Event, Reminder, News, Alert, Notification
 
 **Process**:
 1. Validates JWT token
-2. Fetches all blogs by authenticated user (both draft and published)
-3. Sorts by `createdAt` (newest first)
+2. Fetches blogs by authenticated user (filtered by optional status and category)
+3. Sorts by `publishedAt` for published blogs, `createdAt` for drafts (newest first)
 4. Applies pagination
 5. Returns paginated results
+
+**Filtering Examples**:
+- `GET /api/v1/blog/my/blogs?category=Event` - Get all your Event blogs
+- `GET /api/v1/blog/my/blogs?status=draft&category=News` - Get your draft News blogs
 
 **Response**: Same format as "Get All Published Blogs"
 
@@ -785,6 +840,7 @@ src/app/modules/blogs/
   "title": "Updated Title",
   "description": "Updated content...",
   "status": "published",
+  "category": "Featured",
   "image": "data:image/png;base64,..."
 }
 ```
@@ -873,6 +929,7 @@ Content-Type: application/json
   "title": "My First Blog",
   "description": "This is my first blog post content...",
   "status": "draft",
+  "category": "News",
   "image": "data:image/png;base64,iVBORw0KGgoAAAANS..."
 }
 ```
@@ -883,10 +940,25 @@ Content-Type: application/json
 GET http://localhost:5000/api/v1/blog?page=1&limit=10
 ```
 
+**With Filters**:
+```
+GET http://localhost:5000/api/v1/blog?page=1&limit=10&status=published&category=News
+GET http://localhost:5000/api/v1/blog?category=Featured
+GET http://localhost:5000/api/v1/blog?status=draft&category=Announcement
+```
+
 ### 3. Get My Blogs
 
 ```
 GET http://localhost:5000/api/v1/blog/my/blogs?page=1&limit=10
+Authorization: Bearer <your-jwt-token>
+```
+
+**With Filters**:
+```
+GET http://localhost:5000/api/v1/blog/my/blogs?category=Event
+Authorization: Bearer <your-jwt-token>
+GET http://localhost:5000/api/v1/blog/my/blogs?status=draft&category=News
 Authorization: Bearer <your-jwt-token>
 ```
 
@@ -905,7 +977,8 @@ Content-Type: application/json
 
 {
   "title": "Updated Title",
-  "status": "published"
+  "status": "published",
+  "category": "Featured"
 }
 ```
 
@@ -942,6 +1015,10 @@ Authorization: Bearer <your-jwt-token>
    - Invalid image format
    - Use format: `data:image/png;base64,<base64-string>`
 
+7. **"Category must be one of: Featured, Announcement, Event, Reminder, News, Alert, Notification"**
+   - Invalid category value
+   - Use exactly one of the allowed categories (case-sensitive)
+
 ## 📚 Key Concepts
 
 ### Pagination
@@ -955,6 +1032,23 @@ The system uses offset-based pagination:
 
 - **draft**: Blog is not publicly visible, only author can view
 - **published**: Blog is publicly visible to everyone
+
+### Blog Categories
+
+Blogs can be categorized using the following predefined categories:
+- **Featured**: Highlighted or featured content
+- **Announcement**: Important announcements
+- **Event**: Event-related content
+- **Reminder**: Reminder notifications
+- **News**: News articles
+- **Alert**: Alert messages
+- **Notification**: General notifications
+
+**Category Filtering**:
+- Categories can be used to filter blogs in list endpoints
+- Filter by category: `?category=News`
+- Combine with status: `?status=published&category=Featured`
+- Categories are case-sensitive and must match exactly
 
 ### Ownership Verification
 

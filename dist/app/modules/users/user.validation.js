@@ -75,11 +75,7 @@ exports.getUserByIdZod = zod_1.z.object({
 // Update user validation schema (Admin only)
 exports.updateUserZod = zod_1.z.object({
     body: zod_1.z.object({
-        name: zod_1.z
-            .string()
-            .min(1, 'Name cannot be empty')
-            .trim()
-            .optional(),
+        name: zod_1.z.string().min(1, 'Name cannot be empty').trim().optional(),
         phone: zod_1.z
             .string()
             .regex(/^\d{11}$/, 'Phone must be exactly 11 digits')

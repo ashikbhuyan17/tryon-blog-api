@@ -88,7 +88,7 @@ export const getAllPublishedBlogsService = async (
   // Get blogs based on status and category filters, sorted appropriately
   const [blogs, total] = await Promise.all([
     Blog.find(filter)
-      .populate('author', 'name phone id _id')
+      .populate('author', 'name phone role id _id')
       .sort({ [sortField]: -1 })
       .skip(skip)
       .limit(limit)

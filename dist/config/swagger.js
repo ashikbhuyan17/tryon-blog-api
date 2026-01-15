@@ -8,36 +8,16 @@ const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
 const swaggerDefinition = {
     openapi: '3.0.0',
     info: {
-        title: 'Blog API Documentation',
+        title: '(Tryon) Blog API Documentation',
         version: '1.0.0',
         description: `
-# Blog API - Comprehensive REST API Documentation
 
 A production-ready REST API built with Node.js, Express, TypeScript, and MongoDB for managing blogs and user authentication.
 
-## Features
 
-- 🔐 **Secure Authentication**: JWT-based authentication with bcrypt password hashing
-- 📝 **Blog Management**: Full CRUD operations for blog posts
-- 🏷️ **Category System**: Organize blogs with predefined categories
-- 👥 **User Management**: Admin can manage all users
-- 🔒 **Role-Based Access**: Admin and user roles with proper authorization
-- 📄 **Pagination**: Efficient pagination for list endpoints
-- ✅ **Input Validation**: Comprehensive validation using Zod schemas
 
-## Authentication
 
-Most endpoints require authentication using JWT Bearer tokens. Include the token in the Authorization header:
 
-\`\`\`
-Authorization: Bearer <your-jwt-token>
-\`\`\`
-
-## Base URL
-
-\`\`\`
-http://localhost:5000/api/v1
-\`\`\`
 
 ## Response Format
 
